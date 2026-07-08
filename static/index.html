@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuickSlip — quick file transfer</title>
+<style>
+  :root {
+    --blue: #2563eb;
+    --blue-dark: #1d4ed8;
+    --green: #059669;
+    --red: #dc2626;
+    --ink: #1f2937;
+    --muted: #6b7280;
+    --bg: #f9fafb;
+    --card: #ffffff;
+    --border: #e5e7eb;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg); color: var(--ink);
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+    padding: 24px 16px;
+  }
+  header { text-align: center; margin: 24px 0 32px; }
+  header h1 { font-size: 2rem; letter-spacing: -0.5px; }
+  header p { color: var(--muted); margin-top: 6px; }
+
+  .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+  .tab {
+    padding: 10px 22px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--card); cursor: pointer; font-size: 1rem; font-weight: 600;
+    color: var(--muted);
+  }
+  .tab.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 28px; width: 100%; max-width: 460px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* Upload */
+  .dropzone {
+    border: 2px dashed var(--border); border-radius: 10px; padding: 40px 16px;
+    text-align: center; color: var(--muted); cursor: pointer; transition: 0.15s;
+  }
+  .dropzone.drag { border-color: var(--blue); background: #eff6ff; color: var(--blue); }
+  .dropzone input { display: none; }
+
+  .filemeta { margin-top: 14px; font-size: 0.9rem; color: var(--ink); word-break: break-all; }
+
+  button.primary {
+    margin-top: 18px; width: 100%; padding: 13px; font-size: 1rem; font-weight: 700;
+    background: var(--blue); color: #fff; border: none; border-radius: 8px; cursor: pointer;
+  }
+  button.primary:hover { background: var(--blue-dark); }
+  button.primary:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+
+  /* Code result */
+  .code-display {
+    margin-top: 20px; text-align: center; padding: 20px;
+    background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 10px;
+  }
+  .code-display .code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 2.2rem; font-weight: 800; letter-spacing: 6px; color: var(--green);
+    user-select: all;
+  }
+  .code-display .hint { color: var(--muted); font-size: 0.85rem; margin-top: 8px; }
+  .countdown { font-weight: 700; color: var(--ink); }
+
+  /* Retrieve */
+  .code-input {
+    width: 100%; padding: 14px; font-size: 1.6rem; text-align: center;
+    letter-spacing: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    border: 2px solid var(--border); border-radius: 8px; text-transform: lowercase;
+  }
+  .code-input:focus { outline: none; border-color: var(--blue); }
+
+  .msg { margin-top: 14px; font-size: 0.92rem; text-align: center; }
+  .msg.err { color: var(--red); }
+  .msg.ok { color: var(--green); }
+
+  footer { margin-top: auto; padding-top: 32px; color: var(--muted); font-size: 0.8rem; text-align: center; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>QuickSlip</h1>
+  <p>Upload a file, get a code, grab it anywhere. Gone in 15 minutes.</p>
+</header>
+
+<div class="tabs">
+  <button class="tab active" data-panel="send">Send</button>
+  <button class="tab" data-panel="receive">Receive</button>
+</div>
+
+<div class="card">
+
+  <!-- SEND PANEL -->
+  <div class="panel active" id="panel-send">
+    <label class="dropzone" id="dropzone">
+      <input type="file" id="fileInput">
+      <span id="dropText">Click or drag a file here</span>
+    </label>
+    <div class="filemeta" id="fileMeta"></div>
+    <button class="primary" id="uploadBtn" disabled>Upload &amp; get code</button>
+    <div class="code-display" id="codeDisplay" style="display:none">
+      <div>Your code:</div>
+      <div class="code" id="codeText"></div>
+      <div class="hint">Type this on the other computer at this site.<br>
+        Expires in <span class="countdown" id="countdown"></span> — one download only.</div>
+    </div>
+    <div class="msg" id="sendMsg"></div>
+  </div>
+
+  <!-- RECEIVE PANEL -->
+  <div class="panel" id="panel-receive">
+    <input class="code-input" id="codeInput" maxlength="12"
+           placeholder="enter code" autocomplete="off" autocapitalize="none" spellcheck="false">
+    <button class="primary" id="fetchBtn">Get file</button>
+    <div class="msg" id="recvMsg"></div>
+  </div>
+
+</div>
+
+<footer>Files are encrypted in transit, never require an account, and are deleted after download or 15 minutes.</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- Tab switching ----
+  var tabs = document.querySelectorAll(".tab");
+  tabs.forEach(function (t) {
+    t.addEventListener("click", function () {
+      tabs.forEach(function (x) { x.classList.remove("active"); });
+      t.classList.add("active");
+      document.querySelectorAll(".panel").forEach(function (p) { p.classList.remove("active"); });
+      document.getElementById("panel-" + t.dataset.panel).classList.add("active");
+    });
+  });
+
+  // ---- Send panel ----
+  var fileInput = document.getElementById("fileInput");
+  var dropzone = document.getElementById("dropzone");
+  var dropText = document.getElementById("dropText");
+  var fileMeta = document.getElementById("fileMeta");
+  var uploadBtn = document.getElementById("uploadBtn");
+  var codeDisplay = document.getElementById("codeDisplay");
+  var codeText = document.getElementById("codeText");
+  var countdownEl = document.getElementById("countdown");
+  var sendMsg = document.getElementById("sendMsg");
+  var selectedFile = null;
+  var countdownTimer = null;
+
+  function humanSize(n) {
+    if (n < 1024) return n + " B";
+    if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+    return (n / 1048576).toFixed(1) + " MB";
+  }
+
+  function setFile(f) {
+    selectedFile = f;
+    fileMeta.textContent = f ? f.name + " (" + humanSize(f.size) + ")" : "";
+    uploadBtn.disabled = !f;
+  }
+
+  fileInput.addEventListener("change", function () { setFile(fileInput.files[0] || null); });
+
+  ["dragover", "dragenter"].forEach(function (ev) {
+    dropzone.addEventListener(ev, function (e) { e.preventDefault(); dropzone.classList.add("drag"); });
+  });
+  ["dragleave", "drop"].forEach(function (ev) {
+    dropzone.addEventListener(ev, function (e) { e.preventDefault(); dropzone.classList.remove("drag"); });
+  });
+  dropzone.addEventListener("drop", function (e) {
+    if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
+  });
+
+  function startCountdown(seconds) {
+    clearInterval(countdownTimer);
+    var end = Date.now() + seconds * 1000;
+    function tick() {
+      var left = Math.max(0, Math.round((end - Date.now()) / 1000));
+      var m = Math.floor(left / 60), s = left % 60;
+      countdownEl.textContent = m + ":" + (s < 10 ? "0" : "") + s;
+      if (left <= 0) {
+        clearInterval(countdownTimer);
+        codeDisplay.style.display = "none";
+        sendMsg.textContent = "Code expired.";
+        sendMsg.className = "msg err";
+      }
+    }
+    tick();
+    countdownTimer = setInterval(tick, 1000);
+  }
+
+  uploadBtn.addEventListener("click", function () {
+    if (!selectedFile) return;
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = "Uploading\u2026";
+    sendMsg.textContent = "";
+    sendMsg.className = "msg";
+
+    var form = new FormData();
+    form.append("file", selectedFile);
+
+    fetch("/api/upload", { method: "POST", body: form })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        uploadBtn.textContent = "Upload & get code";
+        uploadBtn.disabled = false;
+        if (!res.ok) throw new Error(res.j.detail || "Upload failed.");
+        codeText.textContent = res.j.code;
+        codeDisplay.style.display = "block";
+        startCountdown(res.j.expires_in);
+      })
+      .catch(function (err) {
+        uploadBtn.textContent = "Upload & get code";
+        uploadBtn.disabled = false;
+        sendMsg.textContent = err.message;
+        sendMsg.className = "msg err";
+      });
+  });
+
+  // ---- Receive panel ----
+  var codeInput = document.getElementById("codeInput");
+  var fetchBtn = document.getElementById("fetchBtn");
+  var recvMsg = document.getElementById("recvMsg");
+
+  function getFile() {
+    var code = codeInput.value.trim().toLowerCase().replace(/[\s-]/g, "");
+    if (!code) return;
+    recvMsg.textContent = "Checking code\u2026";
+    recvMsg.className = "msg";
+
+    fetch("/api/status/" + encodeURIComponent(code))
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.j.detail || "Code not found.");
+        recvMsg.textContent = "Downloading " + res.j.filename + " (" + humanSize(res.j.size) + ")\u2026";
+        recvMsg.className = "msg ok";
+        // Navigate to the download endpoint; browser handles the file save.
+        window.location.href = "/api/download/" + encodeURIComponent(code);
+      })
+      .catch(function (err) {
+        recvMsg.textContent = err.message;
+        recvMsg.className = "msg err";
+      });
+  }
+
+  fetchBtn.addEventListener("click", getFile);
+  codeInput.addEventListener("keydown", function (e) { if (e.key === "Enter") getFile(); });
+})();
+</script>
+</body>
+</html>
