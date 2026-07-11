@@ -69,6 +69,15 @@ async def check_rate_limit(request: Request) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Health check (for deploy platforms / uptime monitors)
+# ---------------------------------------------------------------------------
+@app.get("/api/health")
+async def health():
+    store_ok = await app.state.store.ping()
+    return {"status": "ok" if store_ok else "degraded", "store": store_ok}
+
+
+# ---------------------------------------------------------------------------
 # Upload
 # ---------------------------------------------------------------------------
 @app.post("/api/upload")
