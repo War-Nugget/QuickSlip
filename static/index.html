@@ -3,161 +3,342 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>QuickSlip — quick file transfer</title>
+<title>QuickSlip — file transfer by claim code</title>
+<meta name="description" content="Upload a file, get a claim code, pick it up on any computer. No accounts. Gone in 15 minutes.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --blue: #2563eb;
-    --blue-dark: #1d4ed8;
-    --green: #059669;
-    --red: #dc2626;
-    --ink: #1f2937;
-    --muted: #6b7280;
-    --bg: #f9fafb;
-    --card: #ffffff;
-    --border: #e5e7eb;
+    --paper: #F6F5F0;
+    --card: #FFFFFF;
+    --ink: #1B1B1F;
+    --muted: #6E6E76;
+    --line: #E3E1DA;
+    --post-red: #D64541;
+    --post-blue: #2B4FBF;
+    --ok-green: #2E7D5B;
+    --display: "Space Grotesk", "Segoe UI", Arial, sans-serif;
+    --body: "IBM Plex Sans", -apple-system, "Segoe UI", Arial, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-    background: var(--bg); color: var(--ink);
-    min-height: 100vh; display: flex; flex-direction: column; align-items: center;
-    padding: 24px 16px;
+    font-family: var(--body);
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 32px 16px 24px;
   }
-  header { text-align: center; margin: 24px 0 32px; }
-  header h1 { font-size: 2rem; letter-spacing: -0.5px; }
-  header p { color: var(--muted); margin-top: 6px; }
 
-  .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+  /* ---- Airmail hatch: the signature element ---- */
+  .airmail {
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--post-red) 0 14px,
+      var(--card) 14px 28px,
+      var(--post-blue) 28px 42px,
+      var(--card) 42px 56px
+    );
+  }
+
+  header { text-align: center; margin-bottom: 28px; }
+  .wordmark {
+    font-family: var(--display); font-weight: 700; font-size: 2.4rem;
+    letter-spacing: -1px; line-height: 1;
+  }
+  .wordmark .slip { color: var(--post-blue); }
+  .tagline {
+    margin-top: 8px; color: var(--muted); font-size: 0.95rem;
+  }
+  .tagline .mono { font-family: var(--mono); font-size: 0.85rem; }
+
+  /* ---- The slip (main card) ---- */
+  .slip-card {
+    width: 100%; max-width: 480px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 6px rgba(27,27,31,0.06), 0 12px 32px rgba(27,27,31,0.05);
+  }
+  .slip-card > .airmail { height: 8px; }
+
+  .slip-body { padding: 24px 28px 28px; }
+
+  /* ---- Tabs styled as ticket stubs ---- */
+  .tabs {
+    display: flex; gap: 0; margin-bottom: 22px;
+    border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+  }
   .tab {
-    padding: 10px 22px; border-radius: 8px; border: 1px solid var(--border);
-    background: var(--card); cursor: pointer; font-size: 1rem; font-weight: 600;
-    color: var(--muted);
+    flex: 1; padding: 12px 0; font-family: var(--display); font-weight: 700;
+    font-size: 1rem; letter-spacing: 0.3px;
+    background: var(--card); color: var(--muted);
+    border: none; cursor: pointer;
   }
-  .tab.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .tab + .tab { border-left: 1px solid var(--line); }
+  .tab.active { background: var(--ink); color: var(--card); }
+  .tab:focus-visible { outline: 3px solid var(--post-blue); outline-offset: -3px; }
 
-  .card {
-    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
-    padding: 28px; width: 100%; max-width: 460px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  }
   .panel { display: none; }
   .panel.active { display: block; }
 
-  /* Upload */
+  /* ---- Dropzone ---- */
   .dropzone {
-    border: 2px dashed var(--border); border-radius: 10px; padding: 40px 16px;
-    text-align: center; color: var(--muted); cursor: pointer; transition: 0.15s;
+    display: block;
+    border: 2px dashed var(--line); border-radius: 8px;
+    padding: 36px 16px; text-align: center;
+    color: var(--muted); cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
   }
-  .dropzone.drag { border-color: var(--blue); background: #eff6ff; color: var(--blue); }
-  .dropzone input { display: none; }
+  .dropzone:hover, .dropzone.drag { border-color: var(--post-blue); background: #F4F7FF; color: var(--post-blue); }
+  .dropzone input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .dropzone .dz-title { font-family: var(--display); font-weight: 700; font-size: 1.05rem; }
+  .dropzone .dz-sub { font-size: 0.85rem; margin-top: 6px; }
 
-  .filemeta { margin-top: 14px; font-size: 0.9rem; color: var(--ink); word-break: break-all; }
+  .filemeta {
+    margin-top: 12px; font-family: var(--mono); font-size: 0.82rem;
+    color: var(--ink); word-break: break-all; text-align: center; min-height: 1.2em;
+  }
 
-  button.primary {
-    margin-top: 18px; width: 100%; padding: 13px; font-size: 1rem; font-weight: 700;
-    background: var(--blue); color: #fff; border: none; border-radius: 8px; cursor: pointer;
+  /* ---- Buttons ---- */
+  .btn {
+    width: 100%; margin-top: 16px; padding: 14px;
+    font-family: var(--display); font-weight: 700; font-size: 1.05rem; letter-spacing: 0.3px;
+    background: var(--post-blue); color: #fff;
+    border: none; border-radius: 8px; cursor: pointer;
+    transition: background 0.15s, transform 0.05s;
   }
-  button.primary:hover { background: var(--blue-dark); }
-  button.primary:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+  .btn:hover { background: #1F3CA0; }
+  .btn:active { transform: translateY(1px); }
+  .btn:disabled { background: var(--line); color: var(--muted); cursor: not-allowed; transform: none; }
+  .btn:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 
-  /* Code result */
-  .code-display {
-    margin-top: 20px; text-align: center; padding: 20px;
-    background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 10px;
+  .btn.ghost {
+    background: transparent; color: var(--post-blue);
+    border: 1.5px solid var(--post-blue); font-size: 0.9rem; padding: 10px;
   }
-  .code-display .code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 2.2rem; font-weight: 800; letter-spacing: 6px; color: var(--green);
-    user-select: all;
+  .btn.ghost:hover { background: #F4F7FF; }
+
+  /* ---- Progress bar ---- */
+  .progress { margin-top: 16px; display: none; }
+  .progress.show { display: block; }
+  .progress-track {
+    height: 8px; background: var(--line); border-radius: 4px; overflow: hidden;
   }
-  .code-display .hint { color: var(--muted); font-size: 0.85rem; margin-top: 8px; }
+  .progress-fill {
+    height: 100%; width: 0%; background: var(--post-blue);
+    border-radius: 4px; transition: width 0.2s ease;
+  }
+  .progress-label {
+    margin-top: 6px; font-family: var(--mono); font-size: 0.78rem; color: var(--muted);
+    text-align: right;
+  }
+
+  /* ---- The claim ticket (code result) ---- */
+  .ticket { margin-top: 22px; display: none; }
+  .ticket.show { display: block; animation: tear-in 0.35s ease-out; }
+  @keyframes tear-in {
+    from { opacity: 0; transform: translateY(8px) rotate(-0.5deg); }
+    to   { opacity: 1; transform: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ticket.show { animation: none; }
+    * { transition: none !important; }
+  }
+
+  .ticket-inner {
+    border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+    background: var(--card);
+  }
+  .ticket-inner > .airmail { height: 6px; }
+  .ticket-top { padding: 16px 20px 14px; text-align: center; }
+
+  .ticket-label {
+    font-family: var(--mono); font-weight: 700; font-size: 0.7rem;
+    letter-spacing: 2.5px; text-transform: uppercase; color: var(--post-red);
+  }
+  .ticket-code {
+    font-family: var(--mono); font-weight: 700; font-size: 2.6rem;
+    letter-spacing: 10px; margin-top: 6px; padding-left: 10px; /* balances letter-spacing */
+    user-select: all; color: var(--ink);
+  }
+  .ticket-file {
+    font-family: var(--mono); font-size: 0.78rem; color: var(--muted);
+    margin-top: 4px; word-break: break-all;
+  }
+
+  /* perforation */
+  .perf {
+    border: none; border-top: 2px dashed var(--line);
+    position: relative; margin: 0 -1px;
+  }
+  .perf::before, .perf::after {
+    content: ""; position: absolute; top: -7px; width: 14px; height: 14px;
+    background: var(--paper); border: 1px solid var(--line); border-radius: 50%;
+  }
+  .perf::before { left: -8px; }
+  .perf::after { right: -8px; }
+
+  .ticket-stub {
+    padding: 14px 20px 18px; text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+  }
+  .countdown-row {
+    font-family: var(--mono); font-size: 0.82rem; color: var(--muted);
+  }
   .countdown { font-weight: 700; color: var(--ink); }
+  .stub-actions { display: flex; gap: 10px; width: 100%; }
+  .stub-actions .btn { margin-top: 0; flex: 1; }
 
-  /* Retrieve */
-  .code-input {
-    width: 100%; padding: 14px; font-size: 1.6rem; text-align: center;
-    letter-spacing: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    border: 2px solid var(--border); border-radius: 8px; text-transform: lowercase;
+  #qr { display: flex; justify-content: center; }
+  #qr img, #qr canvas { border: 6px solid #fff; outline: 1px solid var(--line); }
+  .qr-hint { font-size: 0.75rem; color: var(--muted); font-family: var(--mono); }
+
+  /* ---- Receive panel ---- */
+  .code-entry-label {
+    font-family: var(--mono); font-weight: 700; font-size: 0.7rem;
+    letter-spacing: 2.5px; text-transform: uppercase; color: var(--post-red);
+    text-align: center; margin-bottom: 10px;
   }
-  .code-input:focus { outline: none; border-color: var(--blue); }
+  .code-input {
+    width: 100%; padding: 16px 12px;
+    font-family: var(--mono); font-weight: 700; font-size: 1.9rem;
+    letter-spacing: 8px; text-align: center; text-transform: lowercase;
+    border: 2px solid var(--line); border-radius: 8px;
+    background: var(--card); color: var(--ink);
+  }
+  .code-input:focus { outline: none; border-color: var(--post-blue); }
+  .code-input::placeholder { color: var(--line); letter-spacing: 4px; font-size: 1.1rem; }
 
-  .msg { margin-top: 14px; font-size: 0.92rem; text-align: center; }
-  .msg.err { color: var(--red); }
-  .msg.ok { color: var(--green); }
+  .found-file {
+    margin-top: 14px; display: none;
+    font-family: var(--mono); font-size: 0.82rem; color: var(--ink);
+    text-align: center; word-break: break-all;
+  }
+  .found-file.show { display: block; }
 
-  footer { margin-top: auto; padding-top: 32px; color: var(--muted); font-size: 0.8rem; text-align: center; }
+  /* ---- Messages ---- */
+  .msg { margin-top: 14px; font-size: 0.9rem; text-align: center; min-height: 1.3em; }
+  .msg.err { color: var(--post-red); font-weight: 600; }
+  .msg.ok { color: var(--ok-green); font-weight: 600; }
+
+  footer {
+    margin-top: auto; padding-top: 36px; max-width: 480px;
+    color: var(--muted); font-size: 0.78rem; text-align: center; line-height: 1.5;
+    font-family: var(--mono);
+  }
+
+  @media (max-width: 420px) {
+    .wordmark { font-size: 2rem; }
+    .ticket-code { font-size: 2rem; letter-spacing: 7px; padding-left: 7px; }
+    .code-input { font-size: 1.5rem; letter-spacing: 6px; }
+    .slip-body { padding: 20px 18px 22px; }
+  }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>QuickSlip</h1>
-  <p>Upload a file, get a code, grab it anywhere. Gone in 15 minutes.</p>
+  <div class="wordmark">Quick<span class="slip">Slip</span></div>
+  <p class="tagline">Drop a file. Take the slip. Redeem it anywhere. <span class="mono">// gone in 15:00</span></p>
 </header>
 
-<div class="tabs">
-  <button class="tab active" data-panel="send">Send</button>
-  <button class="tab" data-panel="receive">Receive</button>
-</div>
+<main class="slip-card">
+  <div class="airmail" aria-hidden="true"></div>
+  <div class="slip-body">
 
-<div class="card">
-
-  <!-- SEND PANEL -->
-  <div class="panel active" id="panel-send">
-    <label class="dropzone" id="dropzone">
-      <input type="file" id="fileInput">
-      <span id="dropText">Click or drag a file here</span>
-    </label>
-    <div class="filemeta" id="fileMeta"></div>
-    <button class="primary" id="uploadBtn" disabled>Upload &amp; get code</button>
-    <div class="code-display" id="codeDisplay" style="display:none">
-      <div>Your code:</div>
-      <div class="code" id="codeText"></div>
-      <div class="hint">Type this on the other computer at this site.<br>
-        Expires in <span class="countdown" id="countdown"></span> — one download only.</div>
+    <div class="tabs" role="tablist">
+      <button class="tab active" role="tab" aria-selected="true" data-panel="send" id="tab-send">Send</button>
+      <button class="tab" role="tab" aria-selected="false" data-panel="receive" id="tab-receive">Receive</button>
     </div>
-    <div class="msg" id="sendMsg"></div>
+
+    <!-- ============ SEND ============ -->
+    <section class="panel active" id="panel-send" role="tabpanel" aria-labelledby="tab-send">
+
+      <label class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" aria-label="Choose a file to send">
+        <div class="dz-title" id="dzTitle">Drop a file here</div>
+        <div class="dz-sub">or click to browse — up to 100 MB</div>
+      </label>
+      <div class="filemeta" id="fileMeta"></div>
+
+      <button class="btn" id="uploadBtn" disabled>Get claim code</button>
+
+      <div class="progress" id="progress">
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="progress-label" id="progressLabel">0%</div>
+      </div>
+
+      <!-- The claim ticket -->
+      <div class="ticket" id="ticket" aria-live="polite">
+        <div class="ticket-inner">
+          <div class="airmail" aria-hidden="true"></div>
+          <div class="ticket-top">
+            <div class="ticket-label">Claim code</div>
+            <div class="ticket-code" id="codeText"></div>
+            <div class="ticket-file" id="ticketFile"></div>
+          </div>
+          <hr class="perf" aria-hidden="true">
+          <div class="ticket-stub">
+            <div class="countdown-row">expires in <span class="countdown" id="countdown">15:00</span> · one download</div>
+            <div id="qr"></div>
+            <div class="qr-hint" id="qrHint" style="display:none">or scan to open the pickup page</div>
+            <div class="stub-actions">
+              <button class="btn ghost" id="copyBtn">Copy code</button>
+              <button class="btn ghost" id="againBtn">Send another</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="msg" id="sendMsg" role="status"></div>
+    </section>
+
+    <!-- ============ RECEIVE ============ -->
+    <section class="panel" id="panel-receive" role="tabpanel" aria-labelledby="tab-receive">
+      <div class="code-entry-label">Enter claim code</div>
+      <input class="code-input" id="codeInput" maxlength="12" placeholder="abc123"
+             autocomplete="off" autocapitalize="none" spellcheck="false"
+             aria-label="Claim code">
+      <div class="found-file" id="foundFile"></div>
+      <button class="btn" id="fetchBtn">Pick up file</button>
+      <div class="msg" id="recvMsg" role="status"></div>
+    </section>
+
   </div>
+</main>
 
-  <!-- RECEIVE PANEL -->
-  <div class="panel" id="panel-receive">
-    <input class="code-input" id="codeInput" maxlength="12"
-           placeholder="enter code" autocomplete="off" autocapitalize="none" spellcheck="false">
-    <button class="primary" id="fetchBtn">Get file</button>
-    <div class="msg" id="recvMsg"></div>
-  </div>
+<footer>
+  No accounts · encrypted in transit · deleted after one download or 15 minutes,
+  whichever comes first.
+</footer>
 
-</div>
-
-<footer>Files are encrypted in transit, never require an account, and are deleted after download or 15 minutes.</footer>
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
 <script>
 (function () {
   "use strict";
 
-  // ---- Tab switching ----
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ---------------- Tabs ----------------
   var tabs = document.querySelectorAll(".tab");
   tabs.forEach(function (t) {
     t.addEventListener("click", function () {
-      tabs.forEach(function (x) { x.classList.remove("active"); });
+      tabs.forEach(function (x) {
+        x.classList.remove("active");
+        x.setAttribute("aria-selected", "false");
+      });
       t.classList.add("active");
+      t.setAttribute("aria-selected", "true");
       document.querySelectorAll(".panel").forEach(function (p) { p.classList.remove("active"); });
-      document.getElementById("panel-" + t.dataset.panel).classList.add("active");
+      $("panel-" + t.dataset.panel).classList.add("active");
+      if (t.dataset.panel === "receive") $("codeInput").focus();
     });
   });
-
-  // ---- Send panel ----
-  var fileInput = document.getElementById("fileInput");
-  var dropzone = document.getElementById("dropzone");
-  var dropText = document.getElementById("dropText");
-  var fileMeta = document.getElementById("fileMeta");
-  var uploadBtn = document.getElementById("uploadBtn");
-  var codeDisplay = document.getElementById("codeDisplay");
-  var codeText = document.getElementById("codeText");
-  var countdownEl = document.getElementById("countdown");
-  var sendMsg = document.getElementById("sendMsg");
-  var selectedFile = null;
-  var countdownTimer = null;
 
   function humanSize(n) {
     if (n < 1024) return n + " B";
@@ -165,13 +346,28 @@
     return (n / 1048576).toFixed(1) + " MB";
   }
 
+  // ---------------- Send ----------------
+  var fileInput = $("fileInput"), dropzone = $("dropzone"), dzTitle = $("dzTitle");
+  var fileMeta = $("fileMeta"), uploadBtn = $("uploadBtn");
+  var progress = $("progress"), progressFill = $("progressFill"), progressLabel = $("progressLabel");
+  var ticket = $("ticket"), codeText = $("codeText"), ticketFile = $("ticketFile");
+  var countdownEl = $("countdown"), sendMsg = $("sendMsg");
+  var copyBtn = $("copyBtn"), againBtn = $("againBtn");
+  var qrBox = $("qr"), qrHint = $("qrHint");
+
+  var selectedFile = null;
+  var countdownTimer = null;
+
   function setFile(f) {
-    selectedFile = f;
-    fileMeta.textContent = f ? f.name + " (" + humanSize(f.size) + ")" : "";
+    selectedFile = f || null;
+    fileMeta.textContent = f ? f.name + " · " + humanSize(f.size) : "";
+    dzTitle.textContent = f ? "File ready" : "Drop a file here";
     uploadBtn.disabled = !f;
+    sendMsg.textContent = "";
+    sendMsg.className = "msg";
   }
 
-  fileInput.addEventListener("change", function () { setFile(fileInput.files[0] || null); });
+  fileInput.addEventListener("change", function () { setFile(fileInput.files[0]); });
 
   ["dragover", "dragenter"].forEach(function (ev) {
     dropzone.addEventListener(ev, function (e) { e.preventDefault(); dropzone.classList.add("drag"); });
@@ -192,13 +388,34 @@
       countdownEl.textContent = m + ":" + (s < 10 ? "0" : "") + s;
       if (left <= 0) {
         clearInterval(countdownTimer);
-        codeDisplay.style.display = "none";
-        sendMsg.textContent = "Code expired.";
+        ticket.classList.remove("show");
+        sendMsg.textContent = "That slip expired. Upload again for a new code.";
         sendMsg.className = "msg err";
       }
     }
     tick();
     countdownTimer = setInterval(tick, 1000);
+  }
+
+  function showTicket(data) {
+    codeText.textContent = data.code;
+    ticketFile.textContent = data.filename + " · " + humanSize(data.size);
+    ticket.classList.add("show");
+    startCountdown(data.expires_in);
+
+    // QR of the pickup page (graceful: skipped if library didn't load)
+    qrBox.innerHTML = "";
+    qrHint.style.display = "none";
+    if (window.QRCode) {
+      try {
+        new QRCode(qrBox, {
+          text: location.origin + "/?code=" + encodeURIComponent(data.code),
+          width: 96, height: 96,
+          colorDark: "#1B1B1F", colorLight: "#FFFFFF"
+        });
+        qrHint.style.display = "block";
+      } catch (e) { /* QR is a nicety, never an error */ }
+    }
   }
 
   uploadBtn.addEventListener("click", function () {
@@ -207,49 +424,121 @@
     uploadBtn.textContent = "Uploading\u2026";
     sendMsg.textContent = "";
     sendMsg.className = "msg";
+    ticket.classList.remove("show");
+    progress.classList.add("show");
+    progressFill.style.width = "0%";
+    progressLabel.textContent = "0%";
 
     var form = new FormData();
     form.append("file", selectedFile);
 
-    fetch("/api/upload", { method: "POST", body: form })
-      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
-      .then(function (res) {
-        uploadBtn.textContent = "Upload & get code";
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/upload");
+
+    xhr.upload.onprogress = function (e) {
+      if (e.lengthComputable) {
+        var pct = Math.round((e.loaded / e.total) * 100);
+        progressFill.style.width = pct + "%";
+        progressLabel.textContent = pct + "%";
+      }
+    };
+
+    xhr.onload = function () {
+      progress.classList.remove("show");
+      uploadBtn.textContent = "Get claim code";
+      var data = null;
+      try { data = JSON.parse(xhr.responseText); } catch (e) {}
+      if (xhr.status >= 200 && xhr.status < 300 && data) {
+        showTicket(data);
+        // keep button disabled until a new file is chosen
+        setFileInputOnly();
+      } else {
         uploadBtn.disabled = false;
-        if (!res.ok) throw new Error(res.j.detail || "Upload failed.");
-        codeText.textContent = res.j.code;
-        codeDisplay.style.display = "block";
-        startCountdown(res.j.expires_in);
-      })
-      .catch(function (err) {
-        uploadBtn.textContent = "Upload & get code";
-        uploadBtn.disabled = false;
-        sendMsg.textContent = err.message;
+        sendMsg.textContent = (data && data.detail) || "Upload failed. Please try again.";
         sendMsg.className = "msg err";
-      });
+      }
+    };
+
+    xhr.onerror = function () {
+      progress.classList.remove("show");
+      uploadBtn.textContent = "Get claim code";
+      uploadBtn.disabled = false;
+      sendMsg.textContent = "Network error. Check your connection and try again.";
+      sendMsg.className = "msg err";
+    };
+
+    xhr.send(form);
   });
 
-  // ---- Receive panel ----
-  var codeInput = document.getElementById("codeInput");
-  var fetchBtn = document.getElementById("fetchBtn");
-  var recvMsg = document.getElementById("recvMsg");
+  function setFileInputOnly() {
+    selectedFile = null;
+    fileInput.value = "";
+    fileMeta.textContent = "";
+    dzTitle.textContent = "Drop a file here";
+    uploadBtn.disabled = true;
+  }
+
+  copyBtn.addEventListener("click", function () {
+    var code = codeText.textContent;
+    function done() {
+      copyBtn.textContent = "Copied";
+      setTimeout(function () { copyBtn.textContent = "Copy code"; }, 1500);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(done).catch(function () { fallbackCopy(code, done); });
+    } else {
+      fallbackCopy(code, done);
+    }
+  });
+
+  function fallbackCopy(text, cb) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (e) {}
+    document.body.removeChild(ta);
+    cb();
+  }
+
+  againBtn.addEventListener("click", function () {
+    clearInterval(countdownTimer);
+    ticket.classList.remove("show");
+    setFileInputOnly();
+    sendMsg.textContent = "";
+    sendMsg.className = "msg";
+  });
+
+  // ---------------- Receive ----------------
+  var codeInput = $("codeInput"), fetchBtn = $("fetchBtn");
+  var recvMsg = $("recvMsg"), foundFile = $("foundFile");
+
+  function cleanCode(v) {
+    return v.trim().toLowerCase().replace(/[\s-]/g, "");
+  }
 
   function getFile() {
-    var code = codeInput.value.trim().toLowerCase().replace(/[\s-]/g, "");
-    if (!code) return;
-    recvMsg.textContent = "Checking code\u2026";
+    var code = cleanCode(codeInput.value);
+    if (!code) { codeInput.focus(); return; }
+    fetchBtn.disabled = true;
+    recvMsg.textContent = "Checking your slip\u2026";
     recvMsg.className = "msg";
+    foundFile.classList.remove("show");
 
     fetch("/api/status/" + encodeURIComponent(code))
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
-        if (!res.ok) throw new Error(res.j.detail || "Code not found.");
-        recvMsg.textContent = "Downloading " + res.j.filename + " (" + humanSize(res.j.size) + ")\u2026";
+        fetchBtn.disabled = false;
+        if (!res.ok) throw new Error(res.j.detail || "That code wasn't found — it may have expired.");
+        foundFile.textContent = res.j.filename + " · " + humanSize(res.j.size);
+        foundFile.classList.add("show");
+        recvMsg.textContent = "Found it. Downloading now\u2026";
         recvMsg.className = "msg ok";
-        // Navigate to the download endpoint; browser handles the file save.
         window.location.href = "/api/download/" + encodeURIComponent(code);
       })
       .catch(function (err) {
+        fetchBtn.disabled = false;
         recvMsg.textContent = err.message;
         recvMsg.className = "msg err";
       });
@@ -257,6 +546,13 @@
 
   fetchBtn.addEventListener("click", getFile);
   codeInput.addEventListener("keydown", function (e) { if (e.key === "Enter") getFile(); });
+
+  // Deep link support: /?code=abc123 pre-fills and switches to Receive
+  var params = new URLSearchParams(location.search);
+  if (params.get("code")) {
+    codeInput.value = cleanCode(params.get("code"));
+    document.querySelector('[data-panel="receive"]').click();
+  }
 })();
 </script>
 </body>
